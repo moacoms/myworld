@@ -1,11 +1,764 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>마을 모험 RPG - MyWorld</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>마을 모험 RPG - MyWorld</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
+    #ui-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+    #ui-layer > * { pointer-events: auto; }
+    .hidden { display: none !important; }
+
+    /* Title Screen */
+    #title-screen {
+      position: fixed; inset: 0; z-index: 100;
+      background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff;
+    }
+    #title-screen h1 { font-size: 32px; background: linear-gradient(90deg, #FFD700, #FFA500); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .char-select { display: flex; gap: 24px; margin-top: 24px; }
+    .char-btn {
+      padding: 20px 36px; font-size: 18px; background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.3); border-radius: 16px; color: #fff;
+      cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .char-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+    .char-btn .emoji { font-size: 48px; }
+
+    /* HUD */
+    #hud {
+      position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 12px; padding: 6px 16px;
+      background: rgba(0,0,0,0.75); border-radius: 12px; color: #fff; font-size: 13px; z-index: 20;
+      flex-wrap: wrap; justify-content: center;
+    }
+    .hp-bar, .exp-bar { height: 10px; border-radius: 5px; overflow: hidden; background: #333; }
+    .hp-bar { width: 90px; }
+    .exp-bar { width: 70px; height: 6px; }
+    .hp-fill { height: 100%; background: #4CAF50; transition: width 0.3s; }
+    .exp-fill { height: 100%; background: #64B5F6; transition: width 0.3s; }
+
+    /* D-Pad */
+    #dpad {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 2px; z-index: 20;
+    }
+    .dpad-row { display: flex; gap: 2px; }
+    .dpad-btn {
+      width: 52px; height: 52px; font-size: 22px; border: 2px solid #555;
+      border-radius: 10px; background: #333; color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; user-select: none;
+    }
+    .dpad-btn:active { background: #555; }
+    .dpad-spacer { width: 52px; height: 52px; }
+
+    /* Bottom Buttons */
+    #bottom-btns {
+      position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px; z-index: 20; flex-wrap: wrap; justify-content: center;
+    }
+    .menu-btn {
+      padding: 8px 16px; font-size: 13px;
+      background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 8px; color: #fff; cursor: pointer;
+    }
+    .menu-btn:hover { background: rgba(255,255,255,0.25); }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center; z-index: 50;
+    }
+    .modal {
+      background: #1e1e2e; border-radius: 16px; padding: 20px; max-width: 400px; width: 90%;
+      max-height: 75vh; overflow-y: auto; color: #fff; border: 2px solid #444;
+    }
+    .modal h3 { margin: 0 0 12px; font-size: 18px; }
+    .modal-close {
+      margin-top: 12px; width: 100%; padding: 10px; background: #444;
+      border: none; border-radius: 8px; color: #fff; cursor: pointer; font-size: 14px;
+    }
+    .modal-close:hover { background: #555; }
+
+    /* Item Row */
+    .item-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-bottom: 1px solid #333; font-size: 14px;
+    }
+    .item-row .emoji { font-size: 22px; }
+    .item-row .info { flex: 1; }
+    .item-row .desc { font-size: 11px; color: #aaa; }
+    .sm-btn {
+      padding: 4px 10px; font-size: 12px; border: none;
+      border-radius: 6px; color: #fff; cursor: pointer;
+    }
+
+    /* Zone Select */
+    .zone-btn {
+      display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px;
+      background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 10px;
+      color: #fff; cursor: pointer; margin-bottom: 8px; text-align: left;
+    }
+    .zone-btn:hover { background: rgba(255,255,255,0.1); }
+    .zone-btn .emoji { font-size: 24px; }
+
+    /* Combat */
+    #combat-screen {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; padding: 16px; color: #fff; z-index: 30;
+    }
+    .combat-log {
+      background: rgba(0,0,0,0.6); border-radius: 10px; padding: 12px;
+      margin: 12px 0; width: 300px; max-height: 120px; overflow-y: auto;
+    }
+    .combat-log div { font-size: 13px; margin-bottom: 4px; color: #ccc; }
+    .combat-log div:last-child { color: #FFD700; }
+    .combat-btns { display: flex; gap: 12px; }
+    .action-btn {
+      padding: 12px 24px; font-size: 16px; border: none;
+      border-radius: 10px; color: #fff; cursor: pointer; font-weight: bold;
+    }
+
+    /* Notification */
+    #notification {
+      position: fixed; bottom: 200px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.85); color: #FFD700; padding: 10px 24px;
+      border-radius: 20px; font-size: 14px; z-index: 200; white-space: nowrap;
+      transition: opacity 0.3s;
+    }
+
+    /* Recipe ingredients */
+    .ingredient-tag {
+      font-size: 11px; padding: 2px 6px; background: rgba(255,255,255,0.1);
+      border-radius: 4px; display: inline-block; margin: 2px;
+    }
+    .has-enough { color: #4CAF50; }
+    .not-enough { color: #f44336; }
+
+    /* Zone info */
+    #zone-info {
+      position: fixed; top: 44px; left: 50%; transform: translateX(-50%);
+      color: #ccc; font-size: 13px; z-index: 20; background: rgba(0,0,0,0.5);
+      padding: 4px 12px; border-radius: 8px;
+    }
+  </style>
 </head>
 <body>
-<div>Loading game code via GitHub API...</div>
+
+<!-- Title Screen -->
+<div id="title-screen">
+  <div style="font-size:48px; margin-bottom:8px">🏰</div>
+  <h1>마을 모험 RPG</h1>
+  <p style="color:#aaa; margin: 4px 0 24px; font-size:14px">Village Adventure - MyWorld</p>
+  <p style="color:#fff; font-size:16px; margin-bottom:16px">캐릭터를 선택하세요!</p>
+  <div class="char-select">
+    <button class="char-btn" onclick="startGame('boy')"><span class="emoji">🧑</span><span>소년</span></button>
+    <button class="char-btn" onclick="startGame('girl')"><span class="emoji">👧</span><span>소녀</span></button>
+  </div>
+  <p style="color:#666; margin-top:30px; font-size:12px">방향키 또는 화면 버튼으로 이동</p>
+</div>
+
+<!-- Game Canvas -->
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <span id="hud-level" style="color:#FFD700"></span>
+  <span style="color:#f66">❤️ <span id="hud-hp"></span></span>
+  <div class="hp-bar"><div class="hp-fill" id="hud-hp-bar"></div></div>
+  <span style="color:#6af">EXP</span>
+  <div class="exp-bar"><div class="exp-fill" id="hud-exp-bar"></div></div>
+  <span id="hud-gold" style="color:#FFD700"></span>
+  <span id="hud-stats" style="color:#ccc"></span>
+</div>
+
+<!-- Zone Info -->
+<div id="zone-info" class="hidden"></div>
+
+<!-- D-Pad -->
+<div id="dpad" class="hidden">
+  <button class="dpad-btn" onclick="movePlayer(0,-1)">▲</button>
+  <div class="dpad-row">
+    <button class="dpad-btn" onclick="movePlayer(-1,0)">◀</button>
+    <div class="dpad-spacer"></div>
+    <button class="dpad-btn" onclick="movePlayer(1,0)">▶</button>
+  </div>
+  <button class="dpad-btn" onclick="movePlayer(0,1)">▼</button>
+</div>
+
+<!-- Bottom Buttons -->
+<div id="bottom-btns" class="hidden">
+  <button class="menu-btn" onclick="openMenu('inventory')">🎒 가방</button>
+  <button class="menu-btn" onclick="openMenu('equip')">⚔️ 장비</button>
+  <button class="menu-btn" onclick="openMenu('status')">📊 상태</button>
+</div>
+
+<!-- Village Return Button (field only) -->
+<div id="field-btns" class="hidden" style="position:fixed; bottom:150px; left:50%; transform:translateX(-50%); z-index:20;">
+  <button class="menu-btn" onclick="goToVillage()">🏠 마을로 돌아가기</button>
+</div>
+
+<!-- Modal Container -->
+<div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div id="modal-content"></div>
+    <button class="modal-close" onclick="closeModal()">닫기</button>
+  </div>
+</div>
+
+<!-- Combat Screen -->
+<div id="combat-screen" class="hidden">
+  <div id="combat-hud"></div>
+  <div id="combat-monster" style="margin-top:20px; text-align:center"></div>
+  <div id="combat-player" style="margin-top:12px; font-size:48px"></div>
+  <div class="combat-log" id="combat-log"></div>
+  <div class="combat-btns" id="combat-btns"></div>
+</div>
+
+<!-- Notification -->
+<div id="notification" class="hidden"></div>
+
+<script>
+// ============== DATABASE ==============
+const ITEMS_DB = {
+  wood: { name:"나무", emoji:"🪵", type:"material", desc:"건축 재료" },
+  stone: { name:"돌", emoji:"🪨", type:"material", desc:"단단한 재료" },
+  herb: { name:"약초", emoji:"🌿", type:"material", desc:"포션 재료" },
+  meat: { name:"고기", emoji:"🍖", type:"food", heal:20, desc:"체력 +20" },
+  apple: { name:"사과", emoji:"🍎", type:"food", heal:10, desc:"체력 +10" },
+  slimeGel: { name:"슬라임 젤", emoji:"💧", type:"material", desc:"슬라임 드롭" },
+  wolfFang: { name:"늑대 이빨", emoji:"🦷", type:"material", desc:"늑대 드롭" },
+  feather: { name:"깃털", emoji:"🪶", type:"material", desc:"새 드롭" },
+  leather: { name:"가죽", emoji:"🟫", type:"material", desc:"방어구 재료" },
+  gem: { name:"보석", emoji:"💎", type:"material", desc:"희귀 재료" },
+  potion: { name:"포션", emoji:"🧪", type:"food", heal:50, desc:"체력 +50" },
+  woodSword: { name:"나무 검", emoji:"🗡️", type:"weapon", atk:3, desc:"공격력 +3" },
+  stoneSword: { name:"돌 검", emoji:"⚔️", type:"weapon", atk:6, desc:"공격력 +6" },
+  ironSword: { name:"강철 검", emoji:"🔪", type:"weapon", atk:10, desc:"공격력 +10" },
+  woodShield: { name:"나무 방패", emoji:"🛡️", type:"weapon", def:2, desc:"방어력 +2" },
+  leatherArmor: { name:"가죽 갑옷", emoji:"🦺", type:"armor", def:5, desc:"방어력 +5" },
+  ring: { name:"마법 반지", emoji:"💍", type:"accessory", atk:2, def:2, desc:"공/방 +2" },
+};
+
+const RECIPES = [
+  { name:"나무 검", result:"woodSword", ingredients:{ wood:5 } },
+  { name:"돌 검", result:"stoneSword", ingredients:{ wood:3, stone:5 } },
+  { name:"강철 검", result:"ironSword", ingredients:{ stone:10, wolfFang:3, gem:1 } },
+  { name:"나무 방패", result:"woodShield", ingredients:{ wood:8 } },
+  { name:"가죽 갑옷", result:"leatherArmor", ingredients:{ leather:5, slimeGel:3 } },
+  { name:"포션", result:"potion", ingredients:{ herb:3, slimeGel:2 } },
+  { name:"마법 반지", result:"ring", ingredients:{ gem:3, wolfFang:2, feather:5 } },
+];
+
+const MONSTERS = {
+  slime: { name:"슬라임", emoji:"🟢", hp:15, atk:2, exp:10, drops:[{id:"slimeGel",chance:0.7},{id:"herb",chance:0.3}] },
+  bird: { name:"참새", emoji:"🐦", hp:10, atk:1, exp:5, drops:[{id:"feather",chance:0.8},{id:"apple",chance:0.2}] },
+  rabbit: { name:"토끼", emoji:"🐰", hp:8, atk:1, exp:5, drops:[{id:"meat",chance:0.5},{id:"herb",chance:0.4}] },
+  wolf: { name:"늑대", emoji:"🐺", hp:30, atk:5, exp:25, drops:[{id:"wolfFang",chance:0.6},{id:"leather",chance:0.5},{id:"meat",chance:0.4}] },
+  bear: { name:"곰", emoji:"🐻", hp:50, atk:8, exp:40, drops:[{id:"leather",chance:0.7},{id:"meat",chance:0.6},{id:"gem",chance:0.1}] },
+  dragon: { name:"아기 드래곤", emoji:"🐉", hp:80, atk:12, exp:80, drops:[{id:"gem",chance:0.8},{id:"leather",chance:0.5}] },
+};
+
+const FIELD_ZONES = [
+  { name:"초원", emoji:"🌳", bg:"#4a7c59", monsters:["rabbit","bird","slime"], resources:["wood","herb","apple"], minLv:1 },
+  { name:"숲속", emoji:"🌲", bg:"#2d5a3f", monsters:["slime","wolf","bird"], resources:["wood","stone","herb"], minLv:3 },
+  { name:"산길", emoji:"⛰️", bg:"#6b705c", monsters:["wolf","bear"], resources:["stone","herb","gem"], minLv:5 },
+  { name:"용의 동굴", emoji:"🌋", bg:"#5c3a2e", monsters:["bear","dragon"], resources:["gem","stone"], minLv:8 },
+];
+
+const VILLAGE_MAP = [
+  "TTTTTTTTTTTTT",
+  "TG..F....G..T",
+  "T....F.......T",
+  "T..H.....S..T",
+  "T.....P......T",
+  "T..C.....W..T",
+  "T............T",
+  "TG........G.T",
+  "TTTTTEDTTTTT",
+];
+
+const TILE = 48;
+const COLS = 13;
+const ROWS = 9;
+
+// ============== GAME STATE ==============
+let gameState = {
+  screen: "title", gender: null,
+  player: null, inventory: {}, equipped: { weapon:null, armor:null, accessory:null },
+  gold: 50, vilPos: {x:6,y:4}, fieldPos: {x:6,y:4},
+  currentZone: 0, fieldItems: [], fieldMonsters: [],
+  combat: null, combatLog: [],
+};
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  canvas.width = COLS * TILE;
+  canvas.height = ROWS * TILE;
+}
+resizeCanvas();
+
+// ============== UTILITIES ==============
+function expForLevel(lv) { return lv * 30 + (lv - 1) * 15; }
+
+function getStats() {
+  if (!gameState.player) return { atk:0, def:0 };
+  let atk = gameState.player.atk, def = gameState.player.def;
+  Object.values(gameState.equipped).forEach(id => {
+    if (id && ITEMS_DB[id]) {
+      if (ITEMS_DB[id].atk) atk += ITEMS_DB[id].atk;
+      if (ITEMS_DB[id].def) def += ITEMS_DB[id].def;
+    }
+  });
+  return { atk, def };
+}
+
+function addItem(id, count=1) {
+  gameState.inventory[id] = (gameState.inventory[id]||0) + count;
+}
+function removeItem(id, count=1) {
+  gameState.inventory[id] = (gameState.inventory[id]||0) - count;
+  if (gameState.inventory[id] <= 0) delete gameState.inventory[id];
+}
+
+let notifTimer = null;
+function notify(msg) {
+  const el = document.getElementById("notification");
+  el.textContent = msg; el.classList.remove("hidden"); el.style.opacity = 1;
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.classList.add("hidden"), 300); }, 2000);
+}
+
+function gainExp(amount) {
+  let p = gameState.player;
+  p.exp += amount;
+  while (p.exp >= p.nextExp) {
+    p.exp -= p.nextExp;
+    p.level++; p.maxHp += 15; p.hp = p.maxHp; p.atk += 2; p.def += 1;
+    p.nextExp = expForLevel(p.level);
+    notify(`🎉 레벨 업! Lv.${p.level}!`);
+  }
+}
+
+// ============== UI UPDATES ==============
+function updateHUD() {
+  const p = gameState.player; if (!p) return;
+  const s = getStats();
+  document.getElementById("hud-level").textContent = `Lv.${p.level}`;
+  document.getElementById("hud-hp").textContent = `${p.hp}/${p.maxHp}`;
+  document.getElementById("hud-hp-bar").style.width = `${(p.hp/p.maxHp)*100}%`;
+  document.getElementById("hud-hp-bar").style.background = p.hp/p.maxHp > 0.5 ? "#4CAF50" : p.hp/p.maxHp > 0.25 ? "#FF9800" : "#f44336";
+  document.getElementById("hud-exp-bar").style.width = `${(p.exp/p.nextExp)*100}%`;
+  document.getElementById("hud-gold").textContent = `💰${gameState.gold}G`;
+  document.getElementById("hud-stats").textContent = `⚔️${s.atk} 🛡️${s.def}`;
+}
+
+function showScreen(name) {
+  gameState.screen = name;
+  document.getElementById("title-screen").classList.toggle("hidden", name !== "title");
+  document.getElementById("hud").classList.toggle("hidden", name === "title");
+  document.getElementById("dpad").classList.toggle("hidden", name === "title" || name === "combat");
+  document.getElementById("bottom-btns").classList.toggle("hidden", name !== "village");
+  document.getElementById("field-btns").classList.toggle("hidden", name !== "field");
+  document.getElementById("combat-screen").classList.toggle("hidden", name !== "combat");
+  document.getElementById("zone-info").classList.toggle("hidden", name !== "field");
+  canvas.classList.toggle("hidden", name === "title" || name === "combat");
+  if (name === "field") {
+    const z = FIELD_ZONES[gameState.currentZone];
+    document.getElementById("zone-info").textContent = `${z.emoji} ${z.name} — 가장자리로 이동하면 마을로!`;
+  }
+  updateHUD();
+  render();
+}
+
+// ============== RENDERING ==============
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (gameState.screen === "village") renderVillage();
+  else if (gameState.screen === "field") renderField();
+}
+
+function drawEmoji(emoji, x, y, size=24) {
+  ctx.font = `${size}px serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(emoji, x + TILE/2, y + TILE/2);
+}
+
+function renderVillage() {
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const tile = VILLAGE_MAP[y]?.[x] || ".";
+      const px = x * TILE, py = y * TILE;
+      ctx.fillStyle = tile === "T" ? "#3a5a2a" : "#5a8a4a";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.strokeRect(px, py, TILE, TILE);
+      const emojiMap = { H:"🏠", S:"🏪", C:"🔨", W:"⛲", F:"🌾", G:"🌸", E:"🚪", D:"🚪", T:"🌳" };
+      if (emojiMap[tile]) drawEmoji(emojiMap[tile], px, py, tile === "T" ? 16 : 24);
+    }
+  }
+  const pp = gameState.vilPos;
+  drawEmoji(gameState.gender === "boy" ? "🧑" : "👧", pp.x * TILE, pp.y * TILE, 28);
+}
+
+function renderField() {
+  const zone = FIELD_ZONES[gameState.currentZone];
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const px = x * TILE, py = y * TILE;
+      const isBorder = y===0||y===ROWS-1||x===0||x===COLS-1;
+      ctx.fillStyle = isBorder ? darken(zone.bg, 0.3) : zone.bg;
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.strokeRect(px, py, TILE, TILE);
+      if (isBorder) drawEmoji("↩️", px, py, 12);
+      else if (Math.sin(x*7+y*13) > 0.6) drawEmoji(["🌱","🍀","🌿"][(x+y)%3], px, py, 12);
+    }
+  }
+  gameState.fieldItems.forEach(item => drawEmoji(ITEMS_DB[item.id].emoji, item.x*TILE, item.y*TILE, 22));
+  gameState.fieldMonsters.forEach(m => {
+    drawEmoji(m.emoji, m.x*TILE, m.y*TILE, 24);
+    const px = m.x*TILE+6, py = m.y*TILE+TILE-8;
+    ctx.fillStyle = "#333"; ctx.fillRect(px, py, TILE-12, 4);
+    ctx.fillStyle = "#f44"; ctx.fillRect(px, py, (TILE-12)*(m.currentHp/m.hp), 4);
+  });
+  const fp = gameState.fieldPos;
+  drawEmoji(gameState.gender === "boy" ? "🧑" : "👧", fp.x*TILE, fp.y*TILE, 28);
+}
+
+function darken(hex, amount) {
+  let r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  r = Math.floor(r*(1-amount)); g = Math.floor(g*(1-amount)); b = Math.floor(b*(1-amount));
+  return `rgb(${r},${g},${b})`;
+}
+
+// ============== GAME START ==============
+function startGame(gender) {
+  gameState.gender = gender;
+  gameState.player = { level:1, hp:100, maxHp:100, atk:5, def:2, exp:0, nextExp:expForLevel(1) };
+  gameState.inventory = { wood:3, apple:2 };
+  gameState.equipped = { weapon:null, armor:null, accessory:null };
+  gameState.gold = 50;
+  gameState.vilPos = { x:6, y:4 };
+  showScreen("village");
+}
+
+// ============== MOVEMENT ==============
+function movePlayer(dx, dy) {
+  if (gameState.screen === "village") moveVillage(dx, dy);
+  else if (gameState.screen === "field") moveField(dx, dy);
+}
+
+function moveVillage(dx, dy) {
+  const nx = gameState.vilPos.x + dx, ny = gameState.vilPos.y + dy;
+  if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
+  const tile = VILLAGE_MAP[ny]?.[nx];
+  if (tile === "T") return;
+  if (tile === "E" || tile === "D") { openMenu("field_select"); return; }
+  if (tile === "H") { openMenu("home"); return; }
+  if (tile === "S") { openMenu("shop"); return; }
+  if (tile === "C") { openMenu("craft"); return; }
+  if (tile === "W") { gameState.player.hp = gameState.player.maxHp; updateHUD(); notify("⛲ 체력이 회복되었습니다!"); return; }
+  gameState.vilPos = { x:nx, y:ny };
+  render(); updateHUD();
+}
+
+function moveField(dx, dy) {
+  const nx = gameState.fieldPos.x + dx, ny = gameState.fieldPos.y + dy;
+  if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
+  if (ny === 0 || ny === ROWS-1 || nx === 0 || nx === COLS-1) { goToVillage(); return; }
+  const itemIdx = gameState.fieldItems.findIndex(i => i.x === nx && i.y === ny);
+  if (itemIdx >= 0) {
+    const item = gameState.fieldItems[itemIdx];
+    addItem(item.id); notify(`${ITEMS_DB[item.id].emoji} ${ITEMS_DB[item.id].name} 획득!`);
+    gameState.fieldItems.splice(itemIdx, 1);
+  }
+  const monIdx = gameState.fieldMonsters.findIndex(m => m.x === nx && m.y === ny);
+  if (monIdx >= 0) {
+    gameState.fieldPos = { x:nx, y:ny };
+    startCombat(gameState.fieldMonsters[monIdx]);
+    return;
+  }
+  gameState.fieldPos = { x:nx, y:ny };
+  render(); updateHUD();
+}
+
+function goToVillage() {
+  showScreen("village"); notify("마을로 돌아왔습니다!");
+}
+
+// ============== FIELD ==============
+function goToField(zoneIdx) {
+  if (gameState.player.level < FIELD_ZONES[zoneIdx].minLv) {
+    notify(`레벨 ${FIELD_ZONES[zoneIdx].minLv} 이상 필요!`); return;
+  }
+  gameState.currentZone = zoneIdx;
+  generateField(zoneIdx);
+  closeModal();
+  showScreen("field");
+}
+
+function generateField(zoneIdx) {
+  const zone = FIELD_ZONES[zoneIdx];
+  gameState.fieldItems = []; gameState.fieldMonsters = [];
+  for (let i = 0; i < 6; i++) {
+    const res = zone.resources[Math.floor(Math.random()*zone.resources.length)];
+    let x, y;
+    do { x = 1+Math.floor(Math.random()*(COLS-2)); y = 1+Math.floor(Math.random()*(ROWS-2)); }
+    while (gameState.fieldItems.some(it => it.x===x && it.y===y) || (x===6 && y===4));
+    gameState.fieldItems.push({ id:res, x, y });
+  }
+  for (let i = 0; i < 4; i++) {
+    const mId = zone.monsters[Math.floor(Math.random()*zone.monsters.length)];
+    let x, y;
+    do { x = 1+Math.floor(Math.random()*(COLS-2)); y = 1+Math.floor(Math.random()*(ROWS-2)); }
+    while (gameState.fieldItems.some(it => it.x===x && it.y===y) || gameState.fieldMonsters.some(m => m.x===x && m.y===y) || (x===6 && y===4));
+    const m = MONSTERS[mId];
+    gameState.fieldMonsters.push({ ...m, id:mId, x, y, currentHp:m.hp, key:`${mId}_${i}` });
+  }
+  gameState.fieldPos = { x:6, y:4 };
+}
+
+// ============== COMBAT ==============
+function startCombat(monster) {
+  gameState.combat = { monster:{...monster}, playerTurn:true };
+  gameState.combatLog = [`⚔️ ${monster.name}(이)가 나타났다!`];
+  showScreen("combat");
+  renderCombat();
+}
+
+function renderCombat() {
+  const c = gameState.combat; if (!c) return;
+  const m = c.monster; const p = gameState.player; const s = getStats();
+  const zone = FIELD_ZONES[gameState.currentZone];
+
+  document.getElementById("combat-screen").style.background = `linear-gradient(180deg, ${zone.bg}, #1a1a2e)`;
+
+  document.getElementById("combat-monster").innerHTML = `
+    <div style="font-size:64px">${m.emoji}</div>
+    <div style="font-size:18px; font-weight:bold; margin:4px 0">${m.name}</div>
+    <div class="hp-bar" style="margin:0 auto; width:150px"><div class="hp-fill" style="width:${(m.currentHp/m.hp)*100}%; background:${m.currentHp/m.hp > 0.5 ? '#4CAF50' : '#f44'}"></div></div>
+    <div style="font-size:12px; color:#aaa; margin-top:4px">HP ${m.currentHp}/${m.hp}</div>
+  `;
+
+  document.getElementById("combat-player").textContent = gameState.gender === "boy" ? "🧑" : "👧";
+
+  const logEl = document.getElementById("combat-log");
+  logEl.innerHTML = gameState.combatLog.slice(-5).map((l,i) =>
+    `<div style="color:${i===gameState.combatLog.slice(-5).length-1 ? '#FFD700' : '#ccc'}">${l}</div>`
+  ).join("");
+  logEl.scrollTop = logEl.scrollHeight;
+
+  const btnsEl = document.getElementById("combat-btns");
+  if (m.currentHp > 0 && p.hp > 0) {
+    btnsEl.innerHTML = `
+      <button class="action-btn" style="background:#e74c3c" onclick="combatAttack()">⚔️ 공격</button>
+      <button class="action-btn" style="background:#27ae60" onclick="combatHeal()">🍖 회복</button>
+      <button class="action-btn" style="background:#3498db" onclick="combatRun()">🏃 도망</button>
+    `;
+  } else {
+    btnsEl.innerHTML = "";
+  }
+  updateHUD();
+}
+
+function combatAttack() {
+  const c = gameState.combat; if (!c || !c.playerTurn) return;
+  const s = getStats();
+  const dmg = Math.max(1, s.atk - Math.floor(Math.random()*2));
+  c.monster.currentHp = Math.max(0, c.monster.currentHp - dmg);
+  gameState.combatLog.push(`🗡️ ${dmg} 데미지!`);
+
+  if (c.monster.currentHp <= 0) {
+    gameState.combatLog.push(`🎉 ${c.monster.name}(을)를 물리쳤다! +${c.monster.exp} 경험치`);
+    const drops = [];
+    c.monster.drops.forEach(d => { if (Math.random() < d.chance) { addItem(d.id); drops.push(ITEMS_DB[d.id].name); } });
+    if (drops.length) gameState.combatLog.push(`📦 획득: ${drops.join(", ")}`);
+    const goldDrop = Math.floor(Math.random()*c.monster.exp)+5;
+    gameState.gold += goldDrop;
+    gameState.combatLog.push(`💰 +${goldDrop} 골드`);
+    gainExp(c.monster.exp);
+    gameState.fieldMonsters = gameState.fieldMonsters.filter(fm => fm.key !== c.monster.key);
+    renderCombat();
+    setTimeout(() => showScreen("field"), 1500);
+    return;
+  }
+
+  const mDmg = Math.max(1, c.monster.atk - Math.floor(s.def/2) - Math.floor(Math.random()*2));
+  gameState.player.hp = Math.max(0, gameState.player.hp - mDmg);
+  gameState.combatLog.push(`💥 ${c.monster.name}의 반격! -${mDmg} HP`);
+
+  if (gameState.player.hp <= 0) {
+    gameState.combatLog.push("💀 쓰러졌다... 마을로 돌아갑니다.");
+    renderCombat();
+    setTimeout(() => { gameState.player.hp = Math.floor(gameState.player.maxHp/2); showScreen("village"); }, 2000);
+    return;
+  }
+  renderCombat();
+}
+
+function combatHeal() {
+  const foods = Object.entries(gameState.inventory).filter(([id]) => ITEMS_DB[id]?.type === "food");
+  if (!foods.length) { notify("음식이 없습니다!"); return; }
+  const [id] = foods[0]; const item = ITEMS_DB[id];
+  removeItem(id);
+  gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + item.heal);
+  gameState.combatLog.push(`${item.emoji} ${item.name} 사용! +${item.heal} HP`);
+  renderCombat();
+}
+
+function combatRun() {
+  if (Math.random() < 0.7) { showScreen("field"); notify("도망쳤다!"); }
+  else {
+    const s = getStats();
+    const mDmg = Math.max(1, gameState.combat.monster.atk - Math.floor(s.def/2));
+    gameState.player.hp = Math.max(0, gameState.player.hp - mDmg);
+    gameState.combatLog.push("도망 실패!", `💥 -${mDmg} HP`);
+    if (gameState.player.hp <= 0) {
+      gameState.combatLog.push("💀 쓰러졌다... 마을로 돌아갑니다.");
+      renderCombat();
+      setTimeout(() => { gameState.player.hp = Math.floor(gameState.player.maxHp/2); showScreen("village"); }, 2000);
+      return;
+    }
+    renderCombat();
+  }
+}
+
+// ============== MENUS ==============
+function openMenu(type) {
+  const el = document.getElementById("modal-overlay");
+  const content = document.getElementById("modal-content");
+  el.classList.remove("hidden");
+
+  if (type === "field_select") {
+    content.innerHTML = `<h3>🗺️ 어디로 갈까요?</h3>` +
+      FIELD_ZONES.map((z,i) => `
+        <button class="zone-btn" style="opacity:${gameState.player.level >= z.minLv ? 1 : 0.4}" onclick="goToField(${i})">
+          <span class="emoji">${z.emoji}</span>
+          <div><div style="font-weight:bold">${z.name}</div>
+          <div style="font-size:11px;color:#aaa">권장 Lv.${z.minLv}+ | 몬스터: ${z.monsters.map(m=>MONSTERS[m].emoji).join("")}</div></div>
+        </button>
+      `).join("");
+  }
+  else if (type === "inventory") {
+    const entries = Object.entries(gameState.inventory);
+    content.innerHTML = `<h3>🎒 가방</h3>` + (!entries.length ? '<p style="color:#888">비어있습니다</p>' :
+      entries.map(([id,count]) => {
+        const item = ITEMS_DB[id]; if (!item) return "";
+        let btns = "";
+        if (item.type==="food") btns = `<button class="sm-btn" style="background:#27ae60" onclick="useFood('${id}')">사용</button>`;
+        if (["weapon","armor","accessory"].includes(item.type)) btns = `<button class="sm-btn" style="background:#3498db" onclick="equipItem('${id}')">장착</button>`;
+        return `<div class="item-row"><span class="emoji">${item.emoji}</span><div class="info"><div>${item.name} <span style="color:#888">x${count}</span></div><div class="desc">${item.desc}</div></div>${btns}</div>`;
+      }).join(""));
+  }
+  else if (type === "equip") {
+    const s = getStats();
+    content.innerHTML = `<h3>⚔️ 장비</h3><div style="font-size:14px;color:#FFD700;margin-bottom:12px">총 공격력: ${s.atk} | 총 방어력: ${s.def}</div>` +
+      [["weapon","무기"],["armor","방어구"],["accessory","장신구"]].map(([slot,label]) => {
+        const id = gameState.equipped[slot];
+        return `<div class="item-row"><span style="font-size:12px;color:#888;width:50px">${label}</span>${
+          id ? `<span class="emoji">${ITEMS_DB[id].emoji}</span><span style="flex:1;font-size:14px">${ITEMS_DB[id].name}</span><button class="sm-btn" style="background:#e74c3c" onclick="unequipItem('${slot}')">해제</button>`
+          : '<span style="color:#555;font-size:13px">— 비어있음 —</span>'
+        }</div>`;
+      }).join("");
+  }
+  else if (type === "status") {
+    const p = gameState.player; const s = getStats();
+    content.innerHTML = `<h3>📊 캐릭터 정보</h3>
+      <div style="text-align:center;font-size:48px;margin-bottom:8px">${gameState.gender==="boy"?"🧑":"👧"}</div>` +
+      [["레벨",`Lv.${p.level}`],["HP",`${p.hp}/${p.maxHp}`],["경험치",`${p.exp}/${p.nextExp}`],["공격력",s.atk],["방어력",s.def]].map(([k,v]) =>
+        `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #333;font-size:14px"><span style="color:#aaa">${k}</span><span style="color:#FFD700">${v}</span></div>`
+      ).join("");
+  }
+  else if (type === "home") {
+    content.innerHTML = `<h3 style="text-align:center">🏠 내 집</h3><p style="text-align:center;font-size:14px;color:#aaa">편안한 나의 집!</p>
+      <button class="action-btn" style="background:#27ae60;width:100%;margin-top:12px" onclick="restAtHome()">💤 휴식하기 (체력 전회복)</button>`;
+  }
+  else if (type === "shop") {
+    const items = [{id:"apple",price:10},{id:"meat",price:25},{id:"potion",price:60},{id:"herb",price:15}];
+    content.innerHTML = `<h3>🏪 상점</h3><div style="font-size:14px;color:#FFD700;margin-bottom:12px">💰 ${gameState.gold}G</div>` +
+      items.map(s => { const item = ITEMS_DB[s.id]; return `<div class="item-row"><span class="emoji">${item.emoji}</span><div class="info"><div>${item.name}</div><div class="desc">${item.desc}</div></div><button class="sm-btn" style="background:#DAA520" onclick="buyItem('${s.id}',${s.price})">${s.price}G</button></div>`; }).join("");
+  }
+  else if (type === "craft") {
+    content.innerHTML = `<h3>🔨 제작소</h3>` +
+      RECIPES.map((r,i) => {
+        const item = ITEMS_DB[r.result];
+        const canCraft = Object.entries(r.ingredients).every(([id,n]) => (gameState.inventory[id]||0) >= n);
+        const ings = Object.entries(r.ingredients).map(([id,n]) => {
+          const has = gameState.inventory[id]||0;
+          return `<span class="ingredient-tag ${has>=n?'has-enough':'not-enough'}">${ITEMS_DB[id].emoji}${ITEMS_DB[id].name} ${has}/${n}</span>`;
+        }).join("");
+        return `<div style="padding:8px 0;border-bottom:1px solid #333"><div class="item-row"><span class="emoji">${item.emoji}</span><div class="info"><div style="font-weight:bold">${r.name}</div><div class="desc">${item.desc}</div></div><button class="sm-btn" style="background:${canCraft?'#8e44ad':'#555'};opacity:${canCraft?1:0.5}" onclick="craftItem(${i})">제작</button></div><div>${ings}</div></div>`;
+      }).join("");
+  }
+}
+
+function closeModal() { document.getElementById("modal-overlay").classList.add("hidden"); }
+
+function useFood(id) {
+  const item = ITEMS_DB[id]; if (!item || item.type !== "food") return;
+  removeItem(id);
+  gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + item.heal);
+  notify(`${item.emoji} ${item.name} 사용! +${item.heal} HP`);
+  updateHUD(); openMenu("inventory");
+}
+
+function equipItem(id) {
+  const item = ITEMS_DB[id]; if (!item) return;
+  let slot = item.type === "weapon" ? "weapon" : item.type === "armor" ? "armor" : item.type === "accessory" ? "accessory" : null;
+  if (!slot) return;
+  if (gameState.equipped[slot]) addItem(gameState.equipped[slot]);
+  removeItem(id);
+  gameState.equipped[slot] = id;
+  notify(`${item.emoji} ${item.name} 장착!`);
+  updateHUD(); openMenu("inventory");
+}
+
+function unequipItem(slot) {
+  if (gameState.equipped[slot]) {
+    addItem(gameState.equipped[slot]);
+    gameState.equipped[slot] = null;
+    updateHUD(); openMenu("equip");
+  }
+}
+
+function restAtHome() {
+  gameState.player.hp = gameState.player.maxHp;
+  notify("💤 푹 쉬었다! 체력 회복!"); updateHUD(); closeModal();
+}
+
+function buyItem(id, price) {
+  if (gameState.gold < price) { notify("골드가 부족합니다!"); return; }
+  gameState.gold -= price; addItem(id);
+  notify(`${ITEMS_DB[id].emoji} ${ITEMS_DB[id].name} 구매!`);
+  updateHUD(); openMenu("shop");
+}
+
+function craftItem(idx) {
+  const r = RECIPES[idx];
+  for (const [id,n] of Object.entries(r.ingredients)) {
+    if ((gameState.inventory[id]||0) < n) { notify("재료가 부족합니다!"); return; }
+  }
+  for (const [id,n] of Object.entries(r.ingredients)) removeItem(id, n);
+  addItem(r.result);
+  notify(`✨ ${r.name} 제작 완료!`);
+  updateHUD(); openMenu("craft");
+}
+
+// ============== KEYBOARD ==============
+window.addEventListener("keydown", (e) => {
+  const map = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] };
+  const dir = map[e.key]; if (!dir) return;
+  e.preventDefault();
+  movePlayer(dir[0], dir[1]);
+});
+
+// Game loop for smooth rendering
+function gameLoop() { if (gameState.screen === "village" || gameState.screen === "field") render(); requestAnimationFrame(gameLoop); }
+gameLoop();
+</script>
 </body>
 </html>
